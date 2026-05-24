@@ -183,10 +183,7 @@ curl http://localhost:8000/logs/analyze
 
 ## 👥 Team
 
-Built for [Hackathon Name] · May 2026
+Built for [AI Hackathon for Builders] · May 2026
 
 ---
 
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE)
