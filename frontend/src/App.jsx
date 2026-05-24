@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
 
 // ─── Sample Data ────────────────────────────────────────────────────────────
@@ -19,19 +18,22 @@ const SAMPLE_LOGS = [
   { timestamp: "14:32:33", endpoint: "/api/auth/login", status_code: 200, latency_ms: 98, message: "OK", method: "POST" },
 ];
 
-// ─── Claude API Call ─────────────────────────────────────────────────────────
+// ─── OpenRouter API Call ─────────────────────────────────────────────────────
 async function askClaude(prompt) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${ANTHROPIC_KEY}`,
+    },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "anthropic/claude-sonnet-4",
       max_tokens: 1000,
       messages: [{ role: "user", content: prompt }],
     }),
   });
   const data = await res.json();
-  const text = data.content.map((c) => c.text || "").join("");
+  const text = data.choices[0].message.content;
   const clean = text.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
 }
@@ -72,12 +74,7 @@ function computeMetrics(logs) {
 function SevDot({ sev }) {
   const colors = { error: "#E24B4A", warn: "#EF9F27", ok: "#639922" };
   return (
-    <span
-      style={{
-        display: "inline-block", width: 7, height: 7, borderRadius: "50%",
-        background: colors[sev] || "#888", flexShrink: 0, marginTop: 5,
-      }}
-    />
+    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: colors[sev] || "#888", flexShrink: 0, marginTop: 5 }} />
   );
 }
 
@@ -89,10 +86,7 @@ function Badge({ children, type = "info" }) {
     info: { background: "var(--color-background-info)", color: "var(--color-text-info)" },
   };
   return (
-    <span style={{
-      fontSize: 11, padding: "2px 8px", borderRadius: "var(--border-radius-md)",
-      fontFamily: "var(--font-mono)", ...styles[type],
-    }}>
+    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: "var(--border-radius-md)", fontFamily: "var(--font-mono)", ...styles[type] }}>
       {children}
     </span>
   );
@@ -100,16 +94,9 @@ function Badge({ children, type = "info" }) {
 
 function MetricCard({ label, value, sub, subColor = "var(--color-text-secondary)" }) {
   return (
-    <div style={{
-      background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)",
-      padding: "12px 14px",
-    }}>
-      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
-        {value}
-      </div>
+    <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>{value}</div>
       {sub && <div style={{ fontSize: 11, marginTop: 2, color: subColor }}>{sub}</div>}
     </div>
   );
@@ -125,11 +112,7 @@ function AIResult({ result, loading }) {
     );
   }
   if (!result) {
-    return (
-      <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-        Select a log entry or click "analyze all" to get AI-powered debugging recommendations
-      </div>
-    );
+    return <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Select a log entry or click "analyze all" to get AI-powered debugging recommendations</div>;
   }
 
   const sevColor = result.severity === "critical" ? "#E24B4A" : result.severity === "warning" ? "#EF9F27" : "#378ADD";
@@ -139,55 +122,39 @@ function AIResult({ result, loading }) {
     <div style={{ fontSize: 13, lineHeight: 1.7 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
         <Badge type={sevType}>{(result.severity || "info").toUpperCase()}</Badge>
-        {result.estimated_fix_time && (
-          <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
-            Fix ETA: {result.estimated_fix_time}
-          </span>
-        )}
+        {result.estimated_fix_time && <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Fix ETA: {result.estimated_fix_time}</span>}
       </div>
-
       {result.root_cause && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 4 }}>Root cause</div>
-          <div style={{ padding: 8, background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", borderLeft: `3px solid ${sevColor}` }}>
-            {result.root_cause}
-          </div>
+          <div style={{ padding: 8, background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", borderLeft: `3px solid ${sevColor}` }}>{result.root_cause}</div>
         </div>
       )}
-
       {result.likely_causes?.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 4 }}>Likely causes</div>
           <div>
             {result.likely_causes.map((c, i) => (
-              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, padding: "3px 8px", borderRadius: "var(--border-radius-md)", margin: "0 4px 4px 0", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
-                ▸ {c}
-              </span>
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, padding: "3px 8px", borderRadius: "var(--border-radius-md)", margin: "0 4px 4px 0", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>▸ {c}</span>
             ))}
           </div>
         </div>
       )}
-
       {(result.fix_steps || result.immediate_actions)?.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 4 }}>Debugging steps</div>
           {(result.fix_steps || result.immediate_actions).map((s, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6, fontSize: 12 }}>
-              <div style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--color-background-info)", color: "var(--color-text-info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, flexShrink: 0, marginTop: 1 }}>
-                {i + 1}
-              </div>
+              <div style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--color-background-info)", color: "var(--color-text-info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
               <div>{s}</div>
             </div>
           ))}
         </div>
       )}
-
       {result.alert_message && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 4 }}>Slack alert</div>
-          <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", padding: "8px 10px", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)" }}>
-            {result.alert_message}
-          </div>
+          <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", padding: "8px 10px", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)" }}>{result.alert_message}</div>
         </div>
       )}
     </div>
@@ -200,7 +167,6 @@ export default function App() {
   const [selectedLog, setSelectedLog] = useState(null);
   const [aiResult, setAiResult] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [tab, setTab] = useState("logs");
   const [elapsed, setElapsed] = useState(0);
   const fileRef = useRef();
 
@@ -220,21 +186,18 @@ export default function App() {
       if (mode === "entry") {
         prompt = `You are a senior SRE. Analyze this API log entry and return ONLY valid JSON (no markdown):
 ${JSON.stringify(log, null, 2)}
-
 Return: {"severity":"critical|warning|info","likely_causes":["...","...","..."],"root_cause":"one sentence","fix_steps":["step1","step2","step3","step4"],"alert_message":"emoji + under 40 words","estimated_fix_time":"e.g. 15 minutes"}`;
       } else {
         const summary = groups.map((g) => `${g.entries.length}x ${g.endpoint} → ${g.status_code}`).join("\n");
         prompt = `You are a senior SRE. Analyze these API failure patterns and return ONLY valid JSON:
-
 Metrics: error_rate=${metrics.errorRate}%, p95=${metrics.p95}ms, affected_endpoints=${metrics.affectedEndpoints}
 Failure groups:\n${summary}
-
 Return: {"severity":"critical|degraded|warning","root_cause":"sentence","likely_causes":["...","...","..."],"immediate_actions":["action1","action2","action3"],"alert_message":"emoji + under 50 words","estimated_fix_time":"e.g. 30 minutes"}`;
       }
       const result = await askClaude(prompt);
       setAiResult(result);
     } catch (e) {
-      setAiResult({ severity: "info", root_cause: "Could not connect to Claude API. Check your VITE_ANTHROPIC_KEY.", likely_causes: ["Missing API key", "Network error", "Rate limit"], fix_steps: ["Set VITE_ANTHROPIC_KEY in .env", "Restart dev server", "Check Anthropic dashboard"] });
+      setAiResult({ severity: "info", root_cause: "Could not connect to AI API. Check your VITE_ANTHROPIC_KEY.", likely_causes: ["Missing API key", "Network error", "Rate limit"], fix_steps: ["Set VITE_ANTHROPIC_KEY in Vercel env vars", "Redeploy", "Check OpenRouter dashboard"] });
     }
     setAiLoading(false);
   }, [logs, groups, metrics]);
@@ -246,9 +209,7 @@ Return: {"severity":"critical|degraded|warning","root_cause":"sentence","likely_
     reader.onload = (ev) => {
       const lines = ev.target.result.split("\n").filter(Boolean);
       const parsed = [];
-      for (const line of lines) {
-        try { parsed.push(JSON.parse(line)); } catch {}
-      }
+      for (const line of lines) { try { parsed.push(JSON.parse(line)); } catch {} }
       if (parsed.length) setLogs((prev) => [...parsed, ...prev]);
     };
     reader.readAsText(file);
@@ -347,15 +308,11 @@ Return: {"severity":"critical|degraded|warning","root_cause":"sentence","likely_
       {/* AI Panel */}
       <div style={{ border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)", marginBottom: "1rem", overflow: "hidden" }}>
         <div style={{ padding: "10px 14px", borderBottom: "0.5px solid var(--color-border-tertiary)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            ✦ AI debugging analysis
-          </span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>✦ AI debugging analysis</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {aiLoading && <Badge type="warn">analyzing…</Badge>}
             {aiResult && !aiLoading && <Badge type="ok">ready</Badge>}
-            <button onClick={() => handleAnalyze(null, "all")} style={{ fontSize: 11, padding: "4px 10px", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-info)", background: "var(--color-background-info)", color: "var(--color-text-info)", cursor: "pointer", fontFamily: "var(--font-mono)" }}>
-              analyze all ↗
-            </button>
+            <button onClick={() => handleAnalyze(null, "all")} style={{ fontSize: 11, padding: "4px 10px", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-info)", background: "var(--color-background-info)", color: "var(--color-text-info)", cursor: "pointer", fontFamily: "var(--font-mono)" }}>analyze all ↗</button>
           </div>
         </div>
         <div style={{ padding: 14 }}>
